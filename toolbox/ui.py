@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt5.QtCore import Qt, QStringListModel
@@ -8,7 +9,6 @@ from pathlib import Path
 from typing import List, Set
 import sounddevice as sd
 import soundfile as sf
-import matplotlib.pyplot as plt
 import numpy as np
 # from sklearn.manifold import TSNE         # You can try with TSNE if you like, I prefer UMAP 
 from time import sleep
@@ -38,7 +38,6 @@ colormap = np.array([
 default_text = \
     "Welcome to the toolbox! To begin, load an utterance from your datasets or record one " \
     "yourself.\nOnce its embedding has been created, you can synthesize any text written here.\n" \
-    "With the current synthesizer model, punctuation and special characters will be ignored.\n" \
     "The synthesizer expects to generate " \
     "outputs that are somewhere between 5 and 12 seconds.\nTo mark breaks, write a new line. " \
     "Each line will be treated separately.\nThen, they are joined together to make the final " \
@@ -199,8 +198,13 @@ class UI(QDialog):
         sd.default.device = (self.audio_in_device, output_device)
     
     def play(self, wav, sample_rate):
-        sd.stop()
-        sd.play(wav, sample_rate)
+        try:
+            sd.stop()
+            sd.play(wav, sample_rate)
+        except Exception as e:
+            print(e)
+            self.log("Error in audio playback. Try selecting a different audio output device.")
+            self.log("Your device must be connected before you start the toolbox.")
         
     def stop(self):
         sd.stop()
@@ -323,7 +327,7 @@ class UI(QDialog):
         return self.encoder_box.itemData(self.encoder_box.currentIndex())
     
     @property
-    def current_synthesizer_model_dir(self):
+    def current_synthesizer_fpath(self):
         return self.synthesizer_box.itemData(self.synthesizer_box.currentIndex())
     
     @property
@@ -339,13 +343,10 @@ class UI(QDialog):
         self.repopulate_box(self.encoder_box, [(f.stem, f) for f in encoder_fpaths])
         
         # Synthesizer
-        synthesizer_model_dirs = list(synthesizer_models_dir.glob("*"))
-        synthesizer_items = [(f.name.replace("logs-", ""), f) for f in synthesizer_model_dirs]
-        if len(synthesizer_model_dirs) == 0:
-            raise Exception("No synthesizer models found in %s. For the synthesizer, the expected "
-                            "structure is <syn_models_dir>/logs-<model_name>/taco_pretrained/"
-                            "checkpoint" % synthesizer_models_dir)
-        self.repopulate_box(self.synthesizer_box, synthesizer_items)
+        synthesizer_fpaths = list(synthesizer_models_dir.glob("**/*.pt"))
+        if len(synthesizer_fpaths) == 0:
+            raise Exception("No synthesizer models found in %s" % synthesizer_models_dir)
+        self.repopulate_box(self.synthesizer_box, [(f.stem, f) for f in synthesizer_fpaths])
 
         # Vocoder
         vocoder_fpaths = list(vocoder_models_dir.glob("**/*.pt"))
